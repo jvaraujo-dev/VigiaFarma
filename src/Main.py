@@ -4,6 +4,7 @@ import pandas as pd
 import os
 from bs4 import BeautifulSoup
 from urllib.parse import quote
+from datetime import datetime
 
 # filename = list(uploaded.keys())[0]
 # print(uploaded.keys())
@@ -11,6 +12,7 @@ from urllib.parse import quote
 filename = input("Digite o nome do arquivo (com a extensão): ")
 
 df_uploaded = pd.read_excel(filename)
+print(f"Programa iniciado as {datetime.now()}")
 
 #display(df_uploaded.head())
 
@@ -257,4 +259,4 @@ if __name__ == "__main__":
               print(f"\nErro: {e}. Encerrando o programa.")
         else:
             print(f"\nNão foram encontrados resultados para {NOME_DO_MEDICAMENTO_A_BUSCAR}")
-    print("\nPrograma finalizado!")
+    print(f"\nPrograma finalizado as {datetime.now()}")
