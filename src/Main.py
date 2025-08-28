@@ -96,7 +96,6 @@ def buscar_medicamento(nome_medicamento: str):
     """
     Função que envia uma requisição para a API GraphQL e retorna os resultados.
     """
-    apresentacao_buscada = []
     # print(f"Buscando por: '{nome_medicamento}'...")
     payload = {
         "operationName": "searchPrefix",
@@ -109,11 +108,9 @@ def buscar_medicamento(nome_medicamento: str):
         dados = response.json().get('data', {}).get('searchPrefix', [])
         dados_filtrados = []
         for dado in dados:
-            apresentacao = dado.get('apresentacao')
             tem_oferta = dado.get('preco') is not None
-            if apresentacao not in apresentacao_buscada and tem_oferta:
+            if tem_oferta:
                 dados_filtrados.append(dado)
-                apresentacao_buscada.append(apresentacao)
         return dados_filtrados
     except requests.exceptions.RequestException as e:
         print(f"Ocorreu um erro na requisição: {e}")
