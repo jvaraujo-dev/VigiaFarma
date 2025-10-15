@@ -1,0 +1,52 @@
+# Python Virtual Environment
+# Nunca comite a pasta do seu ambiente virtual. Ela é específica da sua máquina e pode ser enorme.
+.venv/
+venv/
+ENV/
+env/
+
+# Python cache e arquivos compilados
+# São gerados automaticamente pelo Python e não precisam ser versionados.
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Arquivos de dados e de saída gerados pelo script
+# Conforme sua solicitação, ignorando os arquivos de Excel e CSV na pasta resources.
+src/resources/*.xlsx
+src/resources/*.xls
+src/resources/*.csv
+
+# Ignorando o arquivo de saída gerado pelo script.
+precos_encontrados.xlsx
+
+# Ignorando os arquivos de depuração HTML que criamos.
+pagina_erro_*.html
+
+# IDE e arquivos de configuração do editor
+# Configurações pessoais do seu ambiente de desenvolvimento.
+.vscode/
+.idea/
+.project
+
+# Cache do Webdriver-Manager
+# Pasta onde o driver do Chrome é baixado e armazenado.
+.wdm/
+.cache/
+
+# Arquivos de sistema operacional
+# Arquivos de metadados gerados pelo macOS e Windows.
+.DS_Store
+Thumbs.db
+
+# Arquivos de log
+# É uma boa prática não versionar arquivos de log.
+*.log
+
+# Arquivos de dependências e build do Python
+*.egg-info/
+build/
+dist/
+wheels/
+pip-wheel-metadata/
