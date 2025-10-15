@@ -17,6 +17,7 @@ __pycache__/
 src/resources/*.xlsx
 src/resources/*.xls
 src/resources/*.csv
+*.xlsx#
 
 # Ignorando o arquivo de saída gerado pelo script.
 precos_encontrados.xlsx
