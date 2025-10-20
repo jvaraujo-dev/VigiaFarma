@@ -1,0 +1,7 @@
+pandas
+beautifulsoup4
+selenium
+webdriver-manager
+numpy
+matplotlib
+jellyfish

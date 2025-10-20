@@ -2,6 +2,7 @@ import pandas as pd
 import re
 import time
 from bs4 import BeautifulSoup
+import jellyfish
 
 # SELENIUM
 from selenium import webdriver
@@ -71,6 +72,24 @@ def geraGrafico(precos_array):
 
     # Exibe o gráfico em uma janela
     plt.show()
+def extrair_unidade_e_quantidade(texto_produto):
+    """Extrai a unidade de medida e a quantidade de um texto."""
+    texto_produto = texto_produto.lower()
+    # Regex para encontrar números (inteiros ou decimais) seguidos por unidades (com ou sem espaço)
+    # Exemplos: 500g, 1kg, 1 kg, 800 g, 2.5 l
+    match = re.search(r"(\d[\d.,]*)\s?(kg|g|ml|l|caps)\b", texto_produto)
+    if match:
+        quantidade = float(match.group(1).replace(",", "."))
+        unidade = match.group(2)
+        # Normaliza para a menor unidade (g, ml) para facilitar a comparação
+        if unidade == "kg":
+            quantidade *= 1000
+            unidade = "g"
+        elif unidade == "l":
+            quantidade *= 1000
+            unidade = "ml"
+        return str(int(quantidade)), unidade
+    return None, None
 
 def buscar_precos(driver, produto):
     """
@@ -100,6 +119,11 @@ def buscar_precos(driver, produto):
             return 'Não encontrado', 'Não encontrado'
 
         precos = []
+
+        qtd_original, unidade_original = extrair_unidade_e_quantidade(produto)
+        print(
+            f" -> Padrão a ser buscado: Quantidade={qtd_original}, Unidade={unidade_original}"
+        )
         for el in elementos_preco:
             preco_texto = el.get_text(strip=True)
             preco_limpo = re.sub(r'[^\d,]', '', preco_texto).replace(',', '')
