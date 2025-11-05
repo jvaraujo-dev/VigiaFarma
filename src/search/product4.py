@@ -117,6 +117,8 @@ def extrair_unidade_e_quantidade(texto_produto):
         elif unidade == "l":
             quantidade *= 1000
             unidade = "ml"
+        else:
+            unidade = "u"
         return str(int(quantidade)), unidade
     return None, None
 
@@ -191,13 +193,25 @@ def buscar_precos(driver, produto):
                 similaridade = jellyfish.jaro_winkler_similarity(
                     produto.lower(), nome_produto_encontrado.lower()
                 )
-                limiar = 0.1  # Mantido o limiar baixo para logar mais itens
+                limiar = 0.01  # Mantido o limiar baixo para logar mais itens
 
                 qtd_encontrada, unidade_encontrada = extrair_unidade_e_quantidade(nome_produto_encontrado)
 
-                # Checa se o item corresponde aos critérios de nome e unidade
-                match_correto = (similaridade >= limiar) and (qtd_original is None or (
-                        qtd_original == qtd_encontrada and unidade_original == unidade_encontrada))
+                status_calculo = "Incluído"
+                motivo_rejeicao = ""
+
+                match_similaridade = (similaridade >= limiar)
+                match_unidade = (qtd_original is None or (
+                        qtd_original == qtd_encontrada and unidade_original == unidade_encontrada) or unidade_encontrada == "u")
+
+                if not match_similaridade:
+                    status_calculo = "Rejeitado (Relevância)"
+                    motivo_rejeicao = f"Baixa similaridade com o termo '{produto}' ({similaridade:.2%})"
+                elif not match_unidade:
+                    status_calculo = "Rejeitado (Relevância)"
+                    unidade_esp = f"{qtd_original}{unidade_original}" if qtd_original else "N/A"
+                    unidade_enc = f"{qtd_encontrada}{unidade_encontrada}" if qtd_encontrada else "N/A"
+                    motivo_rejeicao = f"Unidade/Qtd. divergente (Esperado: {unidade_esp}, Encontrado: {unidade_enc})"
 
                 # Adiciona todos os itens encontrados à lista de análise
                 todos_os_itens_analisados.append({
@@ -206,11 +220,12 @@ def buscar_precos(driver, produto):
                     "Preco": preco_float,
                     "Similaridade": f"{similaridade:.2%}",  # Formata como porcentagem
                     "Link": link_produto,
-                    "Match_Utilizado_No_Calculo": "Sim" if match_correto else "Não"
+                    "Status_Calculo": status_calculo,
+                    "Motivo_Rejeicao": motivo_rejeicao
                 })
 
         # Filtra a lista de produtos que serão usados para o cálculo
-        produtos_para_calculo = [p for p in todos_os_itens_analisados if p["Match_Utilizado_No_Calculo"] == "Sim"]
+        produtos_para_calculo = [p for p in todos_os_itens_analisados if p["Status_Calculo"] == "Incluído"]
 
         if not produtos_para_calculo:
             return "Não encontrado", "Não encontrado", todos_os_itens_analisados
@@ -228,14 +243,33 @@ def buscar_precos(driver, produto):
         limite_inferior = media - (desvio_padrao * 1)
         limite_superior = media + (desvio_padrao * 1)
 
-        precos_filtrados = [p for p in precos if limite_inferior <= p <= limite_superior]
+        precos_filtrados_final = []
+        outliers_removidos_count = 0
 
-        print(f"  -> {len(precos) - len(precos_filtrados)} preço(s) removido(s) como outlier(s).")
+        for item in produtos_para_calculo:
+            preco_item = item["Preco"]
+            if limite_inferior <= preco_item <= limite_superior:
+                precos_filtrados_final.append(preco_item)
+            else:
+                # ATUALIZA O STATUS do item na lista principal 'todos_os_itens_analisados'
+                item["Status_Calculo"] = "Rejeitado (Outlier)"
+                item["Motivo_Rejeicao"] = (
+                    f"Preço (R${preco_item:.2f}) fora do desvio padrão "
+                    f"(Faixa aceitável: R${limite_inferior:.2f} - R${limite_superior:.2f})"
+                )
+                outliers_removidos_count += 1
 
-        if not precos_filtrados:
+        print(f"  -> {outliers_removidos_count} preço(s) removido(s) como outlier(s).")
+
+        # Se *todos* os preços foram filtrados como outliers, retorna o min/max original (pré-filtro)
+        if not precos_filtrados_final:
+            print(
+                "  -> Aviso: Todos os preços 'incluídos' foram removidos como outliers. Retornando min/max da faixa de relevância.")
+            # Os status na lista 'todos_os_itens_analisados' já foram atualizados
             return min(precos), max(precos), todos_os_itens_analisados
 
-        return min(precos_filtrados), max(precos_filtrados), todos_os_itens_analisados
+        # 3. Retorna o min/max dos preços que *não* são outliers
+        return min(precos_filtrados_final), max(precos_filtrados_final), todos_os_itens_analisados
 
     except TimeoutException:
         print(f"Tempo esgotado para '{produto}'. O seletor '{SELETOR_PRECO_ARIA}' não foi encontrado.")
