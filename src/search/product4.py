@@ -1,3 +1,5 @@
+import urllib.parse
+
 import pandas as pd
 import re
 import time
@@ -107,18 +109,51 @@ def extrair_unidade_e_quantidade(texto_produto):
     if not isinstance(texto_produto, str):
         return None, None
     texto_produto = texto_produto.lower()
-    match = re.search(r"(\d[\d.,]*)\s?(kg|g|ml|l|caps)\b", texto_produto)
+    match = re.search(r"(\d[\d.,]*)\s?(kg|kilos|kilo|g|gr|grama|gramas|ml|l|litros|litro|caps|cápsulas|cápsula|capsula|capsulas|comprimidos|comprimido)\b", texto_produto)
     if match:
         quantidade = float(match.group(1).replace(",", "."))
         unidade = match.group(2)
-        if unidade == "kg":
-            quantidade *= 1000
-            unidade = "g"
-        elif unidade == "l":
-            quantidade *= 1000
-            unidade = "ml"
-        else:
-            unidade = "u"
+        match unidade:
+            case "kg":
+                quantidade *= 1000
+                unidade = "g"
+            case "kilo":
+                quantidade *= 1000
+                unidade = "g"
+            case "gramas":
+                unidade = "g"
+            case "grama":
+                unidade = "g"
+            case "gr":
+                unidade = "g"
+            case "g":
+                unidade = "g"
+            case "l":
+                quantidade *= 1000
+                unidade = "ml"
+            case "ml":
+                unidade = "ml"
+            case "litro":
+                quantidade *= 1000
+                unidade = "ml"
+            case "caps":
+                unidade = "caps"
+            case "cps":
+                unidade = "caps"
+            case "cápsulas":
+                unidade = "caps"
+            case "cápsula":
+                unidade = "caps"
+            case "capsulas":
+                unidade = "caps"
+            case "capsula":
+                unidade = "caps"
+            case "comprimidos":
+                unidade = "caps"
+            case "comprimido":
+                unidade = "caps"
+            case _:
+                unidade = "u"
         return str(int(quantidade)), unidade
     return None, None
 
@@ -133,7 +168,6 @@ def buscar_precos(driver, produto):
     url = f"https://www.google.com/search?tbm=shop&q={query}"
     SELETOR_PRECO_ARIA = 'div[aria-label^="Current price"]'
 
-    # NOVA LISTA para guardar todos os detalhes
     todos_os_itens_analisados = []
 
     try:
@@ -157,7 +191,6 @@ def buscar_precos(driver, produto):
 
         if not elementos_preco:
             print("  -> Nenhum elemento de preço encontrado com o seletor aria-label.")
-            # MODIFICAÇÃO: Retorna a lista vazia junto com os outros valores
             return "Não encontrado", "Não encontrado", todos_os_itens_analisados
 
         qtd_original, unidade_original = extrair_unidade_e_quantidade(produto)
@@ -166,7 +199,6 @@ def buscar_precos(driver, produto):
         )
 
         for el_preco in elementos_preco:
-            # container_produto = el_preco.find_parent().find_parent().find_parent()
             container_produto = el_preco.find_parent()
             if not container_produto:
                 continue
@@ -179,21 +211,51 @@ def buscar_precos(driver, produto):
             preco_texto = el_preco["aria-label"]
             preco_limpo = re.search(r"[\d.,]+", preco_texto)
 
+            # --- MODIFICAÇÃO: LÓGICA DE EXTRAÇÃO DE LINK MELHORADA ---
             link_produto = ""
             el_link = container_produto.find_parent("a")
+
             if el_link and "href" in el_link.attrs:
-                link_produto = "https://www.google.com" + el_link["href"]
+                href_bruto = el_link["href"]
+
+                # 1. Checa se é um link de redirecionamento do Google
+                if href_bruto.startswith("/url?q="):
+                    try:
+                        # Parseia a URL bruta
+                        parsed_url = urllib.parse.urlparse(href_bruto)
+                        # Extrai os parâmetros da query (ex: 'q', 'sa', 'ved')
+                        query_params = urllib.parse.parse_qs(parsed_url.query)
+
+                        # Se o parâmetro 'q' existir, esse é o nosso link!
+                        if 'q' in query_params:
+                            # query_params['q'] é uma lista, pegamos o primeiro item
+                            link_produto = query_params['q'][0]
+                        else:
+                            # Se falhar, salva o link de redirecionamento mesmo
+                            link_produto = "https://www.google.com" + href_bruto
+                    except Exception as e:
+                        print(f"  -> Erro ao parsear link: {e}")
+                        link_produto = "https://www.google.com" + href_bruto
+
+                # 2. Se for um link interno do Google (ex: /shopping/product/...)
+                elif href_bruto.startswith("/"):
+                    link_produto = "https://www.google.com" + href_bruto
+
+                # 3. Se for um link absoluto (improvável, mas garante)
+                elif href_bruto.startswith("http"):
+                    link_produto = href_bruto
+            # --- FIM DA MODIFICAÇÃO ---
 
             if not preco_limpo:
                 continue
 
-            preco_float = float(preco_limpo.group().replace(".", "").replace(",", ""))/100
+            preco_float = float(preco_limpo.group().replace(".", "").replace(",", "")) / 100
 
             if nome_produto_encontrado and preco_float:
                 similaridade = jellyfish.jaro_winkler_similarity(
                     produto.lower(), nome_produto_encontrado.lower()
                 )
-                limiar = 0.01  # Mantido o limiar baixo para logar mais itens
+                limiar = 0.1
 
                 qtd_encontrada, unidade_encontrada = extrair_unidade_e_quantidade(nome_produto_encontrado)
 
@@ -202,7 +264,7 @@ def buscar_precos(driver, produto):
 
                 match_similaridade = (similaridade >= limiar)
                 match_unidade = (qtd_original is None or (
-                        qtd_original == qtd_encontrada and unidade_original == unidade_encontrada) or unidade_encontrada == "u")
+                        qtd_original == qtd_encontrada and unidade_original == unidade_encontrada))
 
                 if not match_similaridade:
                     status_calculo = "Rejeitado (Relevância)"
@@ -213,18 +275,18 @@ def buscar_precos(driver, produto):
                     unidade_enc = f"{qtd_encontrada}{unidade_encontrada}" if qtd_encontrada else "N/A"
                     motivo_rejeicao = f"Unidade/Qtd. divergente (Esperado: {unidade_esp}, Encontrado: {unidade_enc})"
 
-                # Adiciona todos os itens encontrados à lista de análise
                 todos_os_itens_analisados.append({
                     "Produto_Pesquisado": produto,
                     "Nome_Encontrado": nome_produto_encontrado,
                     "Preco": preco_float,
-                    "Similaridade": f"{similaridade:.2%}",  # Formata como porcentagem
-                    "Link": link_produto,
+                    "Similaridade": f"{similaridade:.2%}",
+                    "Link": link_produto,  # Agora contém o link limpo
                     "Status_Calculo": status_calculo,
                     "Motivo_Rejeicao": motivo_rejeicao
                 })
 
-        # Filtra a lista de produtos que serão usados para o cálculo
+        # --- Lógica de Filtro de Outlier (Filtro 2) ---
+        # (O restante da função permanece exatamente igual)
         produtos_para_calculo = [p for p in todos_os_itens_analisados if p["Status_Calculo"] == "Incluído"]
 
         if not produtos_para_calculo:
@@ -251,7 +313,6 @@ def buscar_precos(driver, produto):
             if limite_inferior <= preco_item <= limite_superior:
                 precos_filtrados_final.append(preco_item)
             else:
-                # ATUALIZA O STATUS do item na lista principal 'todos_os_itens_analisados'
                 item["Status_Calculo"] = "Rejeitado (Outlier)"
                 item["Motivo_Rejeicao"] = (
                     f"Preço (R${preco_item:.2f}) fora do desvio padrão "
@@ -261,14 +322,11 @@ def buscar_precos(driver, produto):
 
         print(f"  -> {outliers_removidos_count} preço(s) removido(s) como outlier(s).")
 
-        # Se *todos* os preços foram filtrados como outliers, retorna o min/max original (pré-filtro)
         if not precos_filtrados_final:
             print(
                 "  -> Aviso: Todos os preços 'incluídos' foram removidos como outliers. Retornando min/max da faixa de relevância.")
-            # Os status na lista 'todos_os_itens_analisados' já foram atualizados
             return min(precos), max(precos), todos_os_itens_analisados
 
-        # 3. Retorna o min/max dos preços que *não* são outliers
         return min(precos_filtrados_final), max(precos_filtrados_final), todos_os_itens_analisados
 
     except TimeoutException:
@@ -277,7 +335,6 @@ def buscar_precos(driver, produto):
     except Exception as e:
         print(f"Ocorreu um erro inesperado ao buscar '{produto}': {e}")
         return "Erro inesperado", "Erro inesperado", todos_os_itens_analisados
-
 
 # --- Início do Script Principal ---
 service = Service(ChromeDriverManager().install())
